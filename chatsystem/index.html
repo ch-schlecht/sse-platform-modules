@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+    <head>
+        <meta charset="utf-8">
+        <title>Chat!</title>
+        <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css"
+            integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+        <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+        <link rel="stylesheet" href="/css/style.css">
+        <link rel="stylesheet" href="https://use.fontawesome.com/releases/v5.8.1/css/all.css"
+            integrity="sha384-50oBUHEmvpQ+1lW4y57PTFmhCaXp0ML5d60M1M7uH2+nqUivzIebhndOJK28anvf" crossorigin="anonymous">
+        <!-- jQuery 1.12.4 -->
+        <script src="https://code.jquery.com/jquery-1.12.4.min.js"
+            integrity="sha384-nvAa0+6Qg9clwYCGGPpDQLVpLNn0fRaROjHqs13t4Ggj3Ez50XnGQqc/r8MhnRDZ"
+            crossorigin="anonymous">
+        </script>
+        <!-- Bootstrap 3.4.1 -->
+        <script src="https://stackpath.bootstrapcdn.com/bootstrap/3.4.1/js/bootstrap.min.js"
+            integrity="sha384-aJ21OjlMXNL5UyIl/XNwTMqvzeRMZH2w8c5cRVpzpU8Y5bApTppSuUkhZXN0VxHd"
+            crossorigin="anonymous">
+        </script>
+        <!-- forge for en/decryption -->
+        <script src="https://cdn.jsdelivr.net/npm/node-forge@0.7.0/dist/forge.min.js">
+        </script>
+    </head>
+
+    <body>
+        <main role="main">
+            <section class="jumbotron text-center" id="menu" >
+                <div class="row">
+                    <div class="container px-lg-5" style="display:inline">
+                        <div style="padding-top: 20px;">
+                            <form onsubmit=" return newLobby()">
+                                <button class="btn btn-primary my-2">Open new Room</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="row" id="activeLobbies">
+                    <div class="col-md-4">
+                        <div class="card mb-4 box-shadow">
+                            <div class="card-body">
+                                <img class="card-img-top" data-src="holder.js/100px225?theme=thumb&amp;bg=55595c&amp;fg=eceeef&amp;text=PlayTheGame" alt="Thumbnail [100%x225]" style="height: 225px; width: 100%; display: block;" src="data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%22348%22%20height%3D%22225%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20348%20225%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3Cstyle%20type%3D%22text%2Fcss%22%3E%23holder_169c9f4fabb%20text%20%7B%20fill%3A%23eceeef%3Bfont-weight%3Abold%3Bfont-family%3AArial%2C%20Helvetica%2C%20Open%20Sans%2C%20sans-serif%2C%20monospace%3Bfont-size%3A17pt%20%7D%20%3C%2Fstyle%3E%3C%2Fdefs%3E%3Cg%20id%3D%22holder_169c9f4fabb%22%3E%3Crect%20width%3D%22348%22%20height%3D%22225%22%20fill%3D%22%2355595c%22%3E%3C%2Frect%3E%3Cg%3E%3Ctext%20x%3D%22116.7265625%22%20y%3D%22120.3%22%3EPlayTheGame%3C%2Ftext%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E" data-holder-rendered="true">
+                                <p class="card-text">Spiel 1: Filmeraten, bisher 2 Spieler wartend</p>
+                                <p class="card-text">
+                                <ul class="list-group">
+                                    <li class="list-group-item">Ulf</li>
+                                    <li class="list-group-item">Sophi</li>
+                                </ul>
+                                </p>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div class="btn-group">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary">Join</button>
+                                    </div>
+                                    <small class="text-muted">1 min ago started</small>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card mb-4 box-shadow">
+                            <div class="card-body">
+                                <img class="card-img-top" data-src="holder.js/100px225?theme=thumb&amp;bg=55595c&amp;fg=eceeef&amp;text=PlayTheGame" alt="Thumbnail [100%x225]" style="height: 225px; width: 100%; display: block;" src="data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%22348%22%20height%3D%22225%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20348%20225%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3Cstyle%20type%3D%22text%2Fcss%22%3E%23holder_169c9f4fabb%20text%20%7B%20fill%3A%23eceeef%3Bfont-weight%3Abold%3Bfont-family%3AArial%2C%20Helvetica%2C%20Open%20Sans%2C%20sans-serif%2C%20monospace%3Bfont-size%3A17pt%20%7D%20%3C%2Fstyle%3E%3C%2Fdefs%3E%3Cg%20id%3D%22holder_169c9f4fabb%22%3E%3Crect%20width%3D%22348%22%20height%3D%22225%22%20fill%3D%22%2355595c%22%3E%3C%2Frect%3E%3Cg%3E%3Ctext%20x%3D%22116.7265625%22%20y%3D%22120.3%22%3EPlayTheGame%3C%2Ftext%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E" data-holder-rendered="true">
+                                <p class="card-text">Spiel 1: Filmeraten, bisher 2 Spieler wartend</p>
+                                <p class="card-text">
+                                <ul class="list-group">
+                                    <li class="list-group-item">Ulf</li>
+                                    <li class="list-group-item">Sophi</li>
+                                </ul>
+                                </p>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div class="btn-group">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary">Join</button>
+                                    </div>
+                                    <small class="text-muted">1 min ago started</small>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card mb-4 box-shadow">
+                            <div class="card-body">
+                                <img class="card-img-top" data-src="holder.js/100px225?theme=thumb&amp;bg=55595c&amp;fg=eceeef&amp;text=PlayTheGame" alt="Thumbnail [100%x225]" style="height: 225px; width: 100%; display: block;" src="data:image/svg+xml;charset=UTF-8,%3Csvg%20width%3D%22348%22%20height%3D%22225%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20348%20225%22%20preserveAspectRatio%3D%22none%22%3E%3Cdefs%3E%3Cstyle%20type%3D%22text%2Fcss%22%3E%23holder_169c9f4fabb%20text%20%7B%20fill%3A%23eceeef%3Bfont-weight%3Abold%3Bfont-family%3AArial%2C%20Helvetica%2C%20Open%20Sans%2C%20sans-serif%2C%20monospace%3Bfont-size%3A17pt%20%7D%20%3C%2Fstyle%3E%3C%2Fdefs%3E%3Cg%20id%3D%22holder_169c9f4fabb%22%3E%3Crect%20width%3D%22348%22%20height%3D%22225%22%20fill%3D%22%2355595c%22%3E%3C%2Frect%3E%3Cg%3E%3Ctext%20x%3D%22116.7265625%22%20y%3D%22120.3%22%3EPlayTheGame%3C%2Ftext%3E%3C%2Fg%3E%3C%2Fg%3E%3C%2Fsvg%3E" data-holder-rendered="true">
+                                <p class="card-text">Spiel 1: Filmeraten, bisher 2 Spieler wartend</p>
+                                <p class="card-text">
+                                <ul class="list-group">
+                                    <li class="list-group-item">Ulf</li>
+                                    <li class="list-group-item">Sophi</li>
+                                </ul>
+                                </p>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div class="btn-group">
+                                        <button type="button" class="btn btn-sm btn-outline-secondary">Join</button>
+                                    </div>
+                                    <small class="text-muted">1 min ago started</small>
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </section>
+            <div class="py-5 bg-light" id="room" style="display:none">
+        	    <div class="container-fluid h-100" id="room_inline">
+    	            <div class="row justify-content-center h-100">
+    				    <div class="col-md-4 col-xl-3 chat">
+                            <div class="card mb-sm-3 mb-md-0 contacts_card">
+    					        <div class="card-header">
+    						        <div class="input-group">
+    							        <input type="text" placeholder="Search..." name="" class="form-control search">
+    							        <div class="input-group-prepend">
+    								        <span class="input-group-text search_btn">
+                                                <i class="fas fa-search"></i>
+                                            </span>
+    							        </div>
+    						        </div>
+    					        </div>
+    					        <div class="card-body contacts_body">
+    						        <ui class="contacts" id="contacts"></ui>
+    					        </div>
+    					        <div class="card-footer"></div>
+    				        </div>
+                        </div>
+                        <div class="col-md-8 col-xl-6 chat">
+    					    <div class="card">
+    						    <div class="card-header msg_head">
+    							    <div class="d-flex bd-highlight">
+    								    <div class="img_cont">
+    									    <img src="/img/132_Chess_laptop_strategy_game-256.png" class="rounded-circle user_img">
+    									    <span class="online_icon"></span>
+    								    </div>
+    								    <div class="user_info">
+    									    <span id="roomID">Chatroom 1</span>
+    									    <p>der Wahnsinn</p>
+    								    </div>
+    							    </div>
+    							    <span id="action_menu_btn"><i class="fas fa-ellipsis-v"></i></span>
+                                </div>
+    						    <div class="card-body msg_card_body" id="messages"></div>
+                                <form onsubmit="return sendMessage()">
+    						        <div class="card-footer">
+    							        <div class="input-group">
+    								        <div class="input-group-append">
+    									        <span class="input-group-text attach_btn"><i class="fas fa-paperclip"></i></span>
+    								        </div>
+    								        <textarea name="" class="form-control type_msg" placeholder="Type your message..." id="message"></textarea>
+    								        <div class="input-group-append">
+    									        <button class="input-group-text send_btn"><i class="fas fa-location-arrow"></i></button>
+    								        </div>
+    							        </div>
+    						        </div>
+                                </form>
+    					    </div>
+    				    </div>
+    			    </div>
+    		    </div>
+            </div>
+        </main>
+        <script>
+        var username = prompt("Whats your name?", "");
+        var ws = new WebSocket("wss://localhost:8888/websocket");
+        var lobbyID = -1;
+
+        var rsaKeyPair = forge.pki.rsa.generateKeyPair({bits: 2048, e:0x10001});
+        var publicKeyPEM = forge.pki.publicKeyToPem(rsaKeyPair.publicKey);
+        var serverRsaPublicKey = null;
+
+        var aesKey = null;
+        var aesIV = null;
+
+        ws.onopen = function(e){
+            var payload = {
+                'type': 'login',
+                'name': username,
+                'public_key': publicKeyPEM
+            }
+            sendSocket(payload);
+
+        }
+        ws.onmessage = function(e){
+            var message = JSON.parse(e.data);
+            console.log(message);
+            if('type' in message){
+                switch(message.type){
+                    case "active_lobbies":{
+                        if(document.getElementById("room").style.display == "inline"){ // if user is already chatting in a lobby, no need to update lobbies because he doesnt see it
+                            break;
+                        }
+                        else{
+                            if('lobby_info' in message){
+                                clearChildren("activeLobbies");
+                                Object.keys(message.lobby_info).forEach(function(key) {
+                                    createActiveLobbyElement(key, message.lobby_info[key])
+                                });
+                            }
+                        }
+                    }
+                    break;
+                    case "public_key_response":{
+                        serverRsaPublicKey = forge.pki.publicKeyFromPem(message.public_key);
+                    }
+                    break;
+                    case "open_lobby_response": {
+                        if('aes_info' in message){
+                            var aesKeyDecrypted = rsaKeyPair.privateKey.decrypt(forge.util.decode64(message.aes_info.key), 'RSA-OAEP', {
+                                md: forge.md.sha256.create(),
+                                mgf1: forge.mgf1.create()
+                            });
+                            aesKey = forge.util.decode64(aesKeyDecrypted);
+
+                            var aesIvDecrypted = rsaKeyPair.privateKey.decrypt(forge.util.decode64(message.aes_info.iv), 'RSA-OAEP', {
+                                md: forge.md.sha256.create(),
+                                mgf1: forge.mgf1.create()
+                            });
+                            aesIV = forge.util.decode64(aesIvDecrypted);
+                        }
+
+                        if('lobby_id' in message){
+                            lobbyID = message.lobby_id;
+                            document.getElementById("roomID").innerHTML = "Chatroom " + lobbyID;
+                        }
+                        showRoom();
+                    }
+                    break;
+                    case "join_lobby_response": {
+                        if('aes_info' in message){
+                            var aesKeyDecrypted = rsaKeyPair.privateKey.decrypt(forge.util.decode64(message.aes_info.key), 'RSA-OAEP', {
+                                md: forge.md.sha256.create(),
+                                mgf1: forge.mgf1.create()
+                            });
+                            aesKey = forge.util.decode64(aesKeyDecrypted);
+
+                            var aesIvDecrypted = rsaKeyPair.privateKey.decrypt(forge.util.decode64(message.aes_info.iv), 'RSA-OAEP', {
+                                md: forge.md.sha256.create(),
+                                mgf1: forge.mgf1.create()
+                            });
+                            aesIV = forge.util.decode64(aesIvDecrypted);
+                        }
+
+                        if('lobby_id' in message){
+                            lobbyID = message.lobby_id;
+                            document.getElementById("roomID").innerHTML = "Chatroom " + lobbyID;
+                        }
+                        showRoom();
+                    }
+                    break;
+                    case "lobby_user_list": {
+                        if(message.lobby_id == lobbyID){
+                            displayUsersInLobby(message.users);
+                        }
+                    }
+                    break;
+                    case "chat_message": {
+                        var decipher = forge.cipher.createDecipher('AES-CBC', aesKey);
+                        decipher.start({iv: aesIV});
+                        decipher.update(forge.util.createBuffer(forge.util.decode64(message.message)));
+                        decipher.finish();
+                        var decrypted = forge.util.decodeUtf8(decipher.output.getBytes());
+                        displayChatMessage(decrypted);
+                    }
+                    break;
+                }
+            }
+        }
+
+        function sendMessage(){
+            var messageElement = document.getElementById("message");
+            var message = messageElement.value;
+
+            var cipher = forge.cipher.createCipher('AES-CBC', aesKey);
+            cipher.start({iv: aesIV});
+            cipher.update(forge.util.createBuffer(message, 'utf8'));
+            cipher.finish();
+            var encrypted = cipher.output.getBytes();
+            var base64Encrypted = forge.util.encode64(encrypted);
+
+            var payload = {
+                'type': 'chat_message',
+                'name': username,
+                'lobby_id': lobbyID,
+                'message': base64Encrypted
+            }
+
+            sendSocket(payload);
+
+            messageElement.value = "";
+            return false;
+        }
+
+        function newLobby(){
+            var payload = {
+                'type': 'open_lobby',
+                'name': username
+            }
+            sendSocket(payload);
+            return false;
+
+        }
+
+        function showRoom(){
+            document.getElementById("menu").style.display = "none";
+            document.getElementById("room").style.display = "inline";
+        }
+
+        function sendSocket(message){
+            jsonMessage = JSON.stringify(message);
+            ws.send(jsonMessage);
+        }
+
+        function createActiveLobbyElement(lobbyID, usernames){
+            var lobbyBox = document.createElement("div");
+            lobbyBox.className = "col-md-4";
+
+            var lobbyCardBox = document.createElement("div");
+            lobbyCardBox.className = "card mb-4 box-shadow";
+
+            var lobbyCardBody = document.createElement("div");
+            lobbyCardBody.className = "card-body";
+
+            var lobbyCardBodyTextLobby = document.createElement("p");
+            lobbyCardBodyTextLobby.className = "card-text";
+            lobbyCardBodyTextLobby.innerHTML = "Lobby: " + lobbyID;
+            lobbyCardBody.appendChild(lobbyCardBodyTextLobby);
+
+            var lobbyCardBodyTextUsers = document.createElement("p");
+            lobbyCardBodyTextUsers.className = "card-text";
+
+            var usersList = document.createElement("ul");
+            usersList.className = "list-group";
+            for (const username of usernames){
+                var usersListItem = document.createElement("li");
+                usersListItem.className = "list-group-item";
+                usersListItem.innerHTML = username;
+                usersList.appendChild(usersListItem);
+            }
+            lobbyCardBodyTextUsers.appendChild(usersList);
+            lobbyCardBody.appendChild(lobbyCardBodyTextUsers);
+
+            var btnDiv = document.createElement("div");
+            btnDiv.className = "d-flex justify-content-between align-items-center";
+
+            var btnGroup = document.createElement("div");
+            btnGroup.className = "btn-group";
+
+            var joinButton = document.createElement("button");
+            joinButton.type = "button";
+            joinButton.className = "btn btn-sm btn-outline-secondary";
+            joinButton.id = lobbyID;
+            joinButton.innerHTML = "Join this Lobby";
+
+
+            /**
+            THE ONLY IMPORTANT PART OF THIS FUNCTION
+            **/
+            joinButton.onclick = function(e){
+                var payload = {
+                    'type': 'join_lobby',
+                    'lobby_id': this.id, //button holds the lobby_id as id tag
+                    'username': username
+                }
+                sendSocket(payload);
+            }
+
+
+
+            btnGroup.appendChild(joinButton);
+            btnDiv.appendChild(btnGroup);
+            lobbyCardBody.appendChild(btnDiv);
+            lobbyCardBox.appendChild(lobbyCardBody);
+            lobbyBox.appendChild(lobbyCardBox);
+            document.getElementById("activeLobbies").appendChild(lobbyBox);
+        }
+
+        function displayUsersInLobby(usernames){
+            clearChildren("contacts");
+            for (const user of usernames) {
+                var userBox = document.createElement("li");
+                userBox.className = 'active';
+                //userBox.innerHTML = messageDict.lobby[id];
+                var userdiv = document.createElement('div');
+                    userdiv.className = 'd-flex bd-highlight';
+                var imgdiv = document.createElement('div');
+                    imgdiv.className = 'img_cont';
+                var uimg = document.createElement('img');
+                    uimg.className = 'rounded-circle user_img';
+                    uimg.src = '/img/iconfinder_icon-64-face-sunglasses_315578.png';
+                var uimgspan = document.createElement('span');
+                    uimgspan.className = 'online_icon';
+                imgdiv.appendChild(uimg)
+                imgdiv.appendChild(uimgspan)
+                var udivdesc = document.createElement('div');
+                    udivdesc.className = 'user_info';
+                var udivtext = document.createElement('span');
+                    udivtext.innerHTML = user;
+                udivdesc.appendChild(udivtext)
+                userdiv.appendChild(imgdiv)
+                userdiv.appendChild(udivdesc)
+                userBox.appendChild(userdiv)
+                userBox.setAttribute('id', 'u' + user); //id's here cant be simply numbers because answers have those ids --> use prefix u
+                document.getElementById("contacts").appendChild(userBox);
+            }
+        }
+
+        function displayChatMessage(message){
+            var messageBox = document.createElement("div");
+            messageBox.className = 'd-flex justify-content-start mb-4';
+            var userbox = document.createElement('div');
+            userbox.className = 'img_cont_msg';
+            var userimg = document.createElement('img');
+            userimg.className =  'rounded-circle user_img_msg'
+            userimg.src = '/img/iconfinder_icon-64-face-sunglasses_315578.png';
+            userbox.appendChild(userimg);
+            var usermsg = document.createElement('div');
+            usermsg.className = "msg_cotainer";
+            usermsg.innerHTML = message;
+            var usertime = document.createElement('span');
+            usertime.className = "msg_time";
+            var time = new Date().toLocaleTimeString();
+            usertime.innerHTML = time;
+            usermsg.appendChild(usertime);
+            messageBox.appendChild(userbox);
+            messageBox.appendChild(usermsg);
+            document.getElementById("messages").appendChild(messageBox)
+        }
+
+        //helper function to clear child nodes
+        function clearChildren(parentID){
+            var parent = document.getElementById(parentID);
+            if(parent){
+                while(parent.firstChild){
+                    parent.removeChild(parent.firstChild);
+                }
+            }
+        }
+
+        </script>
+    </body>
+
+</html>

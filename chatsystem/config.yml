@@ -1,0 +1,6 @@
+ssl_cert: /home/christian/ssl/cert.crt
+ssl_key: /home/christian/ssl/key.key
+aes_blocksize: 16
+aes_keylength: 16
+rsa_keylength: 2048
+

@@ -1,0 +1,4 @@
+- active lobbies könnten periodisch automatisch gebroadcastet werden, z.B. aller 30/60/90s, oder immer wenn sich was ändert (wie zb open, join, leave - hätte viel traffic)
+    - bei login auf jeden fall dazu
+    - client entscheidet selbst was er damit tut
+    - würde anfrage - antwort szenario vermeiden (weil das wäre dann wieder REST)
