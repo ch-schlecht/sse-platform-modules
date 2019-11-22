@@ -7,7 +7,6 @@ import uuid
 import sys
 import ssl
 import argparse
-import yaml
 import params
 from logic import get_lobbypool, User
 from Crypto.PublicKey import RSA
@@ -129,7 +128,7 @@ if __name__ == '__main__':
     ssl_ctx = None
 
     if args.config:
-        config = yaml.safe_load(open(args.config))
+        config = json.load(open(args.config))
         set_params(config)
         if ('ssl_cert' in config) and ('ssl_key' in config):
             ssl_ctx = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
