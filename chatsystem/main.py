@@ -5,6 +5,7 @@ import tornado.websocket
 import json
 import uuid
 import sys
+sys.path.append(__file__)
 import ssl
 import argparse
 import params
