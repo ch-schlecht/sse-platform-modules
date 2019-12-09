@@ -132,6 +132,7 @@ class LobbyPool:
         :returns: the lobby ID
         :rtype: int
         """
+
         if lobby_id in self.lobbies:
             self.lobbies[lobby_id].add_user(user)
             return lobby_id
@@ -147,6 +148,7 @@ class LobbyPool:
         :returns: the dictionary containing the information
         :rtype: dict
         """
+
         data = {}
         for lobby in self.lobbies:
             data[lobby] = [user.name for user in self.lobbies[lobby].users]
@@ -161,6 +163,7 @@ class LobbyPool:
                   such lobby is present
         :rtype: Lobby, None
         """
+
         if lobby_id in self.lobbies:
             return self.lobbies[lobby_id]
         else:

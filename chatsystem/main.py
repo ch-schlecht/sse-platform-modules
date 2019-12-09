@@ -1,11 +1,12 @@
 # -*- coding: utf-8 -*-
+import os
+import sys
+sys.path.append(os.path.dirname(__file__))
 import tornado.ioloop
 import tornado.web
 import tornado.websocket
 import json
 import uuid
-import sys
-sys.path.append(__file__)
 import ssl
 import argparse
 import params
@@ -121,6 +122,20 @@ def set_params(config):
             params.RSA_KEYLENGTH = config['rsa_keylength']
 
 
+def apply_config(config):
+    #  the platform called this function with the config of this module (path not needed to know here, because the platform searches for it)
+    set_params(config)
+
+
+def stop_signal():
+    #  the platform indicated to stop this module, so close the websocket connections
+    #  status code reference: RFC 6455 7.4.1
+    for client in WebSocket.connections:
+        client.close(code=1001, reason="platform stopped server")
+    WebSocket.close()
+
+
+# only for standalone use
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--config", type=str, help="path to config file")
@@ -143,5 +158,5 @@ if __name__ == '__main__':
 
     app = make_app()
     server = tornado.httpserver.HTTPServer(app, ssl_options=ssl_ctx,)
-    server.listen(8888)
+    server.listen(8080)
     tornado.ioloop.IOLoop.current().start()
