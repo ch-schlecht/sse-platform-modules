@@ -159,8 +159,9 @@
             </div>
         </main>
         <script>
-        var username = prompt("Whats your name?", "");
-        var ws = new WebSocket("wss://localhost:8888/websocket");
+        //var username = prompt("Whats your name?", "");
+        var loc = new URL(window.location.href);
+        var ws = new WebSocket("ws://localhost:" + loc.port + "/chat_websocket");
         var lobbyID = -1;
 
         var rsaKeyPair = forge.pki.rsa.generateKeyPair({bits: 2048, e:0x10001});
@@ -172,13 +173,18 @@
 
         ws.onopen = function(e){
             var payload = {
-                'type': 'login',
-                'name': username,
+                'type': 'transfer_pubkey',
+                //'name': username,
                 'public_key': publicKeyPEM
             }
             sendSocket(payload);
 
         }
+
+        ws.onclose = function(e){
+            window.location.replace("https://localhost:8888/login") //TODO generic
+        }
+
         ws.onmessage = function(e){
             var message = JSON.parse(e.data);
             console.log(message);
@@ -278,7 +284,7 @@
 
             var payload = {
                 'type': 'chat_message',
-                'name': username,
+                //'name': username,
                 'lobby_id': lobbyID,
                 'message': base64Encrypted
             }
@@ -292,7 +298,7 @@
         function newLobby(){
             var payload = {
                 'type': 'open_lobby',
-                'name': username
+                //'name': username
             }
             sendSocket(payload);
             return false;
@@ -358,7 +364,7 @@
                 var payload = {
                     'type': 'join_lobby',
                     'lobby_id': this.id, //button holds the lobby_id as id tag
-                    'username': username
+                    //'username': username
                 }
                 sendSocket(payload);
             }

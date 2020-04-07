@@ -10,10 +10,13 @@ import uuid
 import ssl
 import argparse
 import params
+import CHAT_CONSTANTS
 from logic import get_lobbypool, User
 from Crypto.PublicKey import RSA
 from crypter import get_rsa_crypter
 from base64 import b64encode
+from chat_token_cache import get_token_cache
+from chat_socket_client import get_socket_instance
 
 
 class MainHandler(tornado.web.RequestHandler):
@@ -31,67 +34,74 @@ class WebSocket(tornado.websocket.WebSocketHandler):
     def open(self):
         self.connections.add(self)
 
-    def on_message(self, message):
-        message = json.loads(message)
-        print(message)
-        if 'type' in message:
-            if message['type'] == 'login':
-                self.name = message['name']
-                self.id = uuid.uuid4()
-                self.public_key = RSA.importKey(message['public_key'])
+    async def on_message(self, message):
+        await self.auth_user()
+        if self.current_user:
+            message = json.loads(message)
+            print(message)
+            if 'type' in message:
+                if message['type'] == 'transfer_pubkey':
+                    self.name = self.current_user.name  # message['name']
+                    self.id = uuid.uuid4()
+                    self.public_key = RSA.importKey(message['public_key'])
 
-                rsa_crypter = get_rsa_crypter()
-                self.write_message({'type': 'public_key_response',
-                                    'public_key': rsa_crypter.rsa_public_key_to_string()})
+                    rsa_crypter = get_rsa_crypter()
+                    self.write_message({'type': 'public_key_response',
+                                        'public_key': rsa_crypter.rsa_public_key_to_string()})
 
-                lobbypool = get_lobbypool()
-                active_lobbies = lobbypool.get_active_lobbies()
-                self.broadcast({'type': 'active_lobbies',
-                                'lobby_info': active_lobbies})
-            elif message['type'] == 'open_lobby':
-                lobbypool = get_lobbypool()
-                lobby_id = lobbypool.open_lobby(User(self.id, self.name), self)
-                aes_key = lobbypool.get_lobby(lobby_id).get_aes_key()
-                aes_iv = lobbypool.get_lobby(lobby_id).get_aes_iv()
-
-                rsa_crypter = get_rsa_crypter()
-
-                self.write_message({'type': 'open_lobby_response',
-                                    'lobby_id': lobby_id,
-                                    'aes_info': {
-                                        'key': b64encode(rsa_crypter.encrypt_client_pubkey(self.public_key, b64encode(aes_key).decode())).decode(),
-                                        'iv': b64encode(rsa_crypter.encrypt_client_pubkey(self.public_key, b64encode(aes_iv).decode())).decode()}
-                                    })
-                lobbypool.get_lobby(lobby_id).send_user_list()
-            elif message['type'] == 'join_lobby':
-                lobbypool = get_lobbypool()
-                lobby_id = message['lobby_id']
-                lobby_id = lobbypool.join_lobby(User(self.id, self.name), int(lobby_id))
-
-                aes_key = lobbypool.get_lobby(lobby_id).get_aes_key()
-                aes_iv = lobbypool.get_lobby(lobby_id).get_aes_iv()
-
-                rsa_crypter = get_rsa_crypter()
-
-                self.write_message({'type': 'join_lobby_response',
-                                    'lobby_id': lobby_id,
-                                    'aes_info': {
-                                        'key': b64encode(rsa_crypter.encrypt_client_pubkey(self.public_key, b64encode(aes_key).decode())).decode(),
-                                        'iv': b64encode(rsa_crypter.encrypt_client_pubkey(self.public_key, b64encode(aes_iv).decode())).decode()}
-                                    })
-                lobbypool.get_lobby(lobby_id).send_user_list()
-            elif message['type'] == 'chat_message':
-                lobbypool = get_lobbypool()
-                lobby_id = message['lobby_id']
-                lobbypool.get_lobby(lobby_id).broadcast_message(message)
-            elif message['type'] == 'get_active_lobbies': # explicit request from client to get Lobbies, only send it to him
-                lobbypool = get_lobbypool()
-                active_lobbies = lobbypool.get_active_lobbies()
-                self.write_message({'type': 'active_lobbies',
+                    lobbypool = get_lobbypool()
+                    active_lobbies = lobbypool.get_active_lobbies()
+                    self.broadcast({'type': 'active_lobbies',
                                     'lobby_info': active_lobbies})
+                elif message['type'] == 'open_lobby':
+                    lobbypool = get_lobbypool()
+                    lobby_id = lobbypool.open_lobby(User(self.current_user.id, self.current_user.name), self)
+                    aes_key = lobbypool.get_lobby(lobby_id).get_aes_key()
+                    aes_iv = lobbypool.get_lobby(lobby_id).get_aes_iv()
+
+                    rsa_crypter = get_rsa_crypter()
+
+                    self.write_message({'type': 'open_lobby_response',
+                                        'lobby_id': lobby_id,
+                                        'aes_info': {
+                                            'key': b64encode(rsa_crypter.encrypt_client_pubkey(self.public_key, b64encode(aes_key).decode())).decode(),
+                                            'iv': b64encode(rsa_crypter.encrypt_client_pubkey(self.public_key, b64encode(aes_iv).decode())).decode()}
+                                        })
+                    lobbypool.get_lobby(lobby_id).send_user_list()
+                elif message['type'] == 'join_lobby':
+                    lobbypool = get_lobbypool()
+                    lobby_id = message['lobby_id']
+                    lobby_id = lobbypool.join_lobby(User(self.current_user.id, self.current_user.name), int(lobby_id))
+
+                    aes_key = lobbypool.get_lobby(lobby_id).get_aes_key()
+                    aes_iv = lobbypool.get_lobby(lobby_id).get_aes_iv()
+
+                    rsa_crypter = get_rsa_crypter()
+
+                    self.write_message({'type': 'join_lobby_response',
+                                        'lobby_id': lobby_id,
+                                        'aes_info': {
+                                            'key': b64encode(rsa_crypter.encrypt_client_pubkey(self.public_key, b64encode(aes_key).decode())).decode(),
+                                            'iv': b64encode(rsa_crypter.encrypt_client_pubkey(self.public_key, b64encode(aes_iv).decode())).decode()}
+                                        })
+                    lobbypool.get_lobby(lobby_id).send_user_list()
+                elif message['type'] == 'chat_message':
+                    message["name"] = self.current_user.name
+                    lobbypool = get_lobbypool()
+                    lobby_id = message['lobby_id']
+                    lobbypool.get_lobby(lobby_id).broadcast_message(message)
+                elif message['type'] == 'get_active_lobbies': # explicit request from client to get Lobbies, only send it to him
+                    lobbypool = get_lobbypool()
+                    active_lobbies = lobbypool.get_active_lobbies()
+                    self.write_message({'type': 'active_lobbies',
+                                        'lobby_info': active_lobbies})
+        else:
+            self.connections.remove(self)
+            self.close()
 
     def on_close(self):
-        self.connections.remove(self)
+        if self in self.connections:
+            self.connections.remove(self)
 
     def broadcast(self, message):
         for client in self.connections:
@@ -102,14 +112,42 @@ class WebSocket(tornado.websocket.WebSocketHandler):
             if client.name in self.storage[lobby_id]:
                 client.write_message(message)
 
+    async def auth_user(self):
+        token = self.get_secure_cookie("access_token")
+        if token is not None:
+            token = token.decode("utf-8")
 
-def make_app():
-    return tornado.web.Application([
-        (r"/", MainHandler),
-        (r"/websocket", WebSocket),
-        (r"/css/(.*)", tornado.web.StaticFileHandler, {"path": "./css/"},),
-        (r"/img/(.*)", tornado.web.StaticFileHandler, {"path": "./img/"},),
-    ])
+        cached_user = get_token_cache().get(token)
+        if cached_user is not None:
+            self.current_user = User(cached_user["id"], cached_user["username"])
+            print(self.current_user.name)
+        else:
+            client = await get_socket_instance()
+            result = await client.write({"type": "token_validation",
+                                         "access_token": token})
+            if result["success"]:
+                self.current_user = User(result["user"]["user_id"], result["user"]["username"])
+                get_token_cache().insert(token, self.current_user.name, "test@mail.de", self.current_user.id) # TODO email
+            else:
+                self.current_user = None
+                print("no logged in user")
+
+
+def make_app(called_by_platform):
+    if called_by_platform:
+        return tornado.web.Application([
+            (r"/main", MainHandler),
+            (r"/chat_websocket", WebSocket),
+            (r"/css/(.*)", tornado.web.StaticFileHandler, {"path": "./modules/chatsystem/css/"},),
+            (r"/img/(.*)", tornado.web.StaticFileHandler, {"path": "./modules/chatsystem/img/"},),
+        ])
+    else:
+        return tornado.web.Application([
+            (r"/main", MainHandler),
+            (r"/chat_websocket", WebSocket),
+            (r"/css/(.*)", tornado.web.StaticFileHandler, {"path": "./css/"},),
+            (r"/img/(.*)", tornado.web.StaticFileHandler, {"path": "./img/"},),
+        ])
 
 
 def set_params(config):
@@ -124,7 +162,12 @@ def set_params(config):
 
 def apply_config(config):
     #  the platform called this function with the config of this module (path not needed to know here, because the platform searches for it)
+    print(config)
     set_params(config)
+
+
+def inherit_platform_port(port):  # invoked by platform
+    CHAT_CONSTANTS.PLATFORM_PORT = port
 
 
 def stop_signal():
@@ -156,7 +199,7 @@ if __name__ == '__main__':
         print('config not supplied or an error occured when reading the file')
         sys.exit(-1)
 
-    app = make_app()
+    app = make_app(False)
     server = tornado.httpserver.HTTPServer(app, ssl_options=ssl_ctx,)
     server.listen(8080)
     tornado.ioloop.IOLoop.current().start()
