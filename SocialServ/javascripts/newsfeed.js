@@ -1,30 +1,34 @@
 //URL's
 var loc = new URL(window.location.href);
-var baseUrl = 'http://localhost:' + loc.port;
-var loginURL = 'https://localhost:8888/login';
-var currURL = window.location.href;
+var baseUrl = window.location.origin; // Returns base URL (https://example.com)
+var loginURL = baseUrl + '/login';
+var currURL = window.location.href; // Returns full URL (https://example.com/path/example.html)
 
 //Datetimes
 var today = new Date();
 var yesterday = new Date(new Date().getTime() - (24 * 60 * 60 * 1000)); //24 hours ago
 var now = today.toISOString();
 var from = yesterday.toISOString();
+var daysAgo = 0;
 
 //HTML & JQuery
 var $body = $('body');
 var $feedContainer = $('#feedContainer');
 var postTemplate = document.getElementById('postTemplate').innerHTML;
+var repostTemplate = document.getElementById('repostTemplate').innerHTML;
 var commentTemplate = document.getElementById('commentTemplate').innerHTML;
 var tagTemplate = document.getElementById('tagTemplate').innerHTML;
 
 //Boolean & Data
 var inSpace = false;
+var Spaces = [];
 var spacename;
 var currentUser = {};
 var user = {};
 var users = {};
-
+var userRole;
 var fileList = [];
+
 /**
  * initNewsFeed - renders the timeline depending on the current URL
  * update Datetimes and get information about all Spaces
@@ -40,41 +44,30 @@ function initNewsFeed() {
   from = yesterday.toISOString();
 
   if (currURL == baseUrl + '/admin') {
-    inSpace = false;
-    getTimeline(from, now);
-
+    if(userRole != 'admin') window.location.href = baseUrl + '/main';
+    else {
+      inSpace = false;
+      getTimeline(from, now);
+    }
   } else if (currURL == baseUrl + '/main') {
     inSpace = false;
     getPersonalTimeline(from,now);
   } else if (currURL.indexOf(baseUrl + '/space') !== -1) {
     inSpace = true;
     spacename = currURL.substring(currURL.lastIndexOf('/') + 1);
-    document.title = spacename + ' - Social Network';
     getTimelineSpace(spacename, from, now);
+
   } else if (currURL == baseUrl + '/myprofile') {
     inSpace = false;
-    document.title = currentUser.username + ' - Social Network';
     getTimelineUser(currentUser.username, from, now);
-    currentUser['followSize'] = currentUser['follows'].length;
-    currentUser['spaceSize'] = currentUser['spaces'].length;
-    currentUser["profile_pic_URL"] = baseUrl + '/uploads/' + currentUser["profile"]["profile_pic"];
-    if(currentUser.hasOwnProperty('projects')) currentUser['projectSize'] = currentUser['projects'].length;
-    if(!document.body.contains(document.getElementById('profilePanel'))){
-      $('#profileContainer').prepend(Mustache.render(document.getElementById('profileTemplate').innerHTML, currentUser));
-    } else {
-      var template = document.getElementById('profileTemplate').innerHTML;
-      Mustache.parse(template);
-      var render = Mustache.to_html(template, currentUser);
-      $("#profileContainer").empty().html(render);
-    }
+
   } else if (currURL.indexOf(baseUrl + '/profile') !== -1) {
     inSpace = false;
-    name = currURL.substring(currURL.lastIndexOf('/') + 1);
+    var name = currURL.substring(currURL.lastIndexOf('/') + 1);
     if(name == currentUser.username){
       window.location.href = baseUrl + '/myprofile';
     } else {
-    document.title = name + ' - Social Network';
-    getUserInfo(name);
+    getTimelineUser(name, from, now);
     }
   }
   getSpaces();
@@ -87,7 +80,9 @@ function initNewsFeed() {
  */
 $(document).ready(function () {
   getCurrentUserInfo();
-
+  getUserRole();
+  getAllUsers();
+  initNewsFeed();
   const interval  = setInterval(function() {
      checkUpdate();
   }, 10000);
@@ -158,17 +153,54 @@ $body.delegate('.link-class', 'click', function () {
     window.location.href = baseUrl + '/profile/' + selectedUser;
 });
 
-$body.delegate('.element i', 'click', function () {
+$body.delegate('i.fa-file', 'click', function () {
   $("input[type='file']").trigger('click');
 });
 
+$body.delegate('#record', 'click', function () {
+  if($(this).hasClass('btn-success')){
+    navigator.mediaDevices.getUserMedia({audio:true}).then(stream => {
+      handlerFunction(stream);
+      console.log("recording");
+      $(this).removeClass('btn-success');
+      $(this).addClass('btn-danger');
+      audioChunks = [];
+      rec.start();
+    });
+  } else {
+    console.log("stopped recording");
+    $(this).removeClass('btn-danger');
+    $(this).addClass('btn-success');
+    rec.stop();
+  }
+});
+
+function handlerFunction(stream){
+  rec = new MediaRecorder(stream);
+  rec.ondataavailable = e => {
+    audioChunks.push(e.data);
+    if (rec.state == "inactive"){
+      let blob = new Blob(audioChunks,{type:'audio/mpeg-3'});
+      recordedAudio.src = URL.createObjectURL(blob);
+      recordedAudio.controls=true;
+      recordedAudio.autoplay=true;
+      for (var pair of fileList.entries()) {
+          if(pair[1].name == "VoiceInput.mpeg") fileList.splice(pair[0], 1);
+      }
+      fileList.push(new File([blob], "VoiceInput.mpeg"));
+    }
+  }
+}
+
 $body.delegate('#files', 'change', function () {
   var fileInput = document.getElementById('files');
-  fileList = [];
+  for (var pair of fileList.entries()) {
+      if(pair[1].name != "VoiceInput.mpeg") fileList.splice(pair[0], 1);
+  }
   $('#postdiv span').remove();
   $('#postdiv br').remove();
   for(var i=0; i < fileInput.files.length; i++) {
-    //console.log(fileInput.files[i]);
+    console.log(fileInput.files[i]);
     fileList.push(fileInput.files[i]);
     $('#postdiv').append('<span class="name">'+fileInput.files[i].name+'</span></br>');
   }
@@ -203,6 +235,16 @@ function isVideo(filename) {
     case 'gif':
     case 'ogv':
       // etc
+      return true;
+  }
+  return false;
+}
+
+function isAudio(filename) {
+  var ext = getExtension(filename);
+  switch (ext.toLowerCase()) {
+    case 'mpeg':
+      //etc
       return true;
   }
   return false;
@@ -262,11 +304,13 @@ function displayTimeline(timeline) {
   $('[data-toggle="tooltip"]').tooltip();
   $('.carousel').carousel();
   //loading posts => set from-Date until there is a post in interval from - to
-  if(timeline.posts.length === 0) {
+  if(timeline.posts.length === 0 && daysAgo < 30) {
     yesterday = new Date(yesterday - (24 * 60 * 60 * 1000));
+    daysAgo += 1;
     initNewsFeed();
     return;
   }
+  daysAgo = 0;
   //sort posts based on creation_date from new to older
   var sortPostsByDateArray = timeline.posts.sort(comp);
   $.each(sortPostsByDateArray, function (i, post) {
@@ -291,6 +335,10 @@ function displayTimeline(timeline) {
       $agoPost.text(calculateAgoTime(post.creation_date));
       $likers.attr("data-original-title",likerHTML);
       $likeCounter.text(countLikes);
+      if(post.hasOwnProperty('isRepost') && (post.isRepost == true)){
+        var $originalAgo = $existingPost.find('#originalAgo');
+        $originalAgo.text(calculateAgoTime(post.originalCreationDate));
+      }
       //toggle class if liked
      if(liked && $likeIcon.hasClass('fa-thumbs-up')) {
         $likeIcon.removeClass('fa-thumbs-up').addClass('fa-thumbs-down');
@@ -320,12 +368,14 @@ function displayTimeline(timeline) {
     if(post.hasOwnProperty('files') && post.files.length > 0) {
         var fileImages = [];
         var fileVideos = [];
+        var fileAudios = [];
         var fileMediaCountTail = [];
-
         var otherfiles = [];
+
         $.each(post.files, function (j, file) {
           if(isImage(file)) fileImages.push(baseUrl + '/uploads/' + file);
           else if (isVideo(file)) fileVideos.push(baseUrl + '/uploads/' + file);
+          else if (isAudio(file)) fileAudios.push(baseUrl + '/uploads/' + file);
           else {
             otherfiles.push({"path": baseUrl + '/uploads/' + file, "name" : file});
           }
@@ -333,19 +383,22 @@ function displayTimeline(timeline) {
 
         post["hasMedia"] = ((fileImages.length + fileVideos.length) > 0) ? true : false;
         post["multipleMedia"] = ((fileImages.length + fileVideos.length) > 1) ? true : false;
-        var media = fileImages.concat(fileVideos); //concatenation of 2 arrays
-        var firstMediaURL = media.shift();  //removes first element of media
-        post["firstMediaURL"] = firstMediaURL;
-        post["firstMediaIsImage"] = (isImage(firstMediaURL)) ? true : false;
-        post["tailImagesURL"] = fileImages.filter(value => media.includes(value)); //intersection of 2 arrays => fileImages and media
-        post["tailVideosURL"] = fileVideos.filter(value => media.includes(value));
-
-        for(var i=0; i<media.length; i++) fileMediaCountTail.push(i+1);
-        post["fileMediaCountTail"] = fileMediaCountTail;
+        if(post["hasMedia"] == true){
+          var media = fileImages.concat(fileVideos); //concatenation of 2 arrays
+          var firstMediaURL = media.shift();  //removes first element of media
+          post["firstMediaURL"] = firstMediaURL;
+          post["firstMediaIsImage"] = (isImage(firstMediaURL)) ? true : false;
+          post["tailImagesURL"] = fileImages.filter(value => media.includes(value)); //intersection of 2 arrays => fileImages and media
+          post["tailVideosURL"] = fileVideos.filter(value => media.includes(value));
+          for(var i=0; i<media.length; i++) fileMediaCountTail.push(i+1);
+          post["fileMediaCountTail"] = fileMediaCountTail;
+      }
+        post["audiosURL"] = fileAudios;
         post["otherfiles"] = otherfiles;
     }
 
     var isAuthor = (currentUser.username == post.author.username) ? true : false;
+    var isRepostAuthor = (currentUser.username == post.repostAuthor) ? true : false;
     //add additional values to post JSON
     post["isAuthor"] = isAuthor;
     post["authorPicURL"] = baseUrl + '/uploads/' + post.author.profile_pic;
@@ -358,11 +411,23 @@ function displayTimeline(timeline) {
     } else post["hasSpace"] = true;
 
     var firstPostDate = $feedContainer.find('.post:first').attr('name');
-    // check if there is a new post (more present datetime) => prepend to feedContainer
-    // else post is older => append to feedContainer
-    if(!(firstPostDate === null) && post.creation_date > firstPostDate) {
-      $feedContainer.prepend(Mustache.render(postTemplate, post));
-    } else $feedContainer.append(Mustache.render(postTemplate, post));
+
+    //console.log(post)
+    if(post['isRepost'] == true){
+
+      post["isRepostAuthor"] = isRepostAuthor;
+      post["originalAgo"] = calculateAgoTime(post.originalCreationDate);
+      post["repostAuthorPicURL"] = baseUrl + '/uploads/' + post.repostAuthorProfilePic;
+      // check if there is a new post (more present datetime) => prepend to feedContainer
+      // else post is older => append to feedContainer
+      if(!(firstPostDate === null) && post.creation_date > firstPostDate) {
+          $feedContainer.prepend(Mustache.render(repostTemplate, post));
+      } else $feedContainer.append(Mustache.render(repostTemplate, post));
+    } else{
+        if(!(firstPostDate === null) && post.creation_date > firstPostDate) {
+            $feedContainer.prepend(Mustache.render(postTemplate, post));
+        } else $feedContainer.append(Mustache.render(postTemplate, post));
+    }
     //console.log(post);
     //in both case render comments to post and tags
     var $feed = $('#' + post._id);
@@ -546,6 +611,8 @@ function post(text, tags, space) {
       fileList = [];
       $('#postdiv span').remove();
       $('#postdiv br').remove();
+      var audio = document.getElementById("recordedAudio");
+      audio.removeAttribute("controls");
 
       $("#postAlert").html('');
       $("#postAlert").removeClass("alert alert-danger");
@@ -756,6 +823,7 @@ function getSpaces() {
         space['inSpace'] = inSpace;
         $dropdown.prepend(Mustache.render(document.getElementById('spaceTemplate').innerHTML, space));
         localStorage.setItem(space.name, space.members);
+        Spaces.push(space);
         // if not in Space render spaceTemplateSelect
         if (currURL.indexOf(baseUrl + '/space') == -1) {
           $('#selectSpace').append(Mustache.render(document.getElementById('spaceTemplateSelect').innerHTML, space));
@@ -844,6 +912,29 @@ function checkUpdate() {
   });
 }
 
+function getUserRole(){
+  $.ajax({
+    type: 'GET',
+    url: '/permissions',
+    dataType: 'json',
+    async: false,
+    success: function (data) {
+      userRole = data.role;
+      if(userRole != 'admin') $('#adminLink').attr("href", baseUrl + '/main');
+    },
+
+    error: function (xhr, status, error) {
+      if (xhr.status == 401) {
+        window.location.href = loginURL;
+      } else {
+        alert('error get current user role');
+        console.log(error);
+        console.log(status);
+        console.log(xhr);
+      }
+    },
+  });
+}
 /**
  * getCurrentUserInfo - saves currenUser information
  * first time calling InitNewsFeed (on document load)
@@ -854,10 +945,9 @@ function getCurrentUserInfo() {
     type: 'GET',
     url: '/profileinformation',
     dataType: 'json',
+    async: false,
     success: function (data) {
       currentUser = data;
-      getAllUsers();
-      initNewsFeed();
     },
 
     error: function (xhr, status, error) {
@@ -873,34 +963,6 @@ function getCurrentUserInfo() {
   });
 }
 
-/**
- * getUserInfo - get basic information about a user
- * because we dont get every information right now, we need to call getFollows
- * store user information in "user"
- * @param  {String} name username
- */
-function getUserInfo(name){
-  $.ajax({
-    type: 'GET',
-    url: '/users/user_data?username=' + name,
-    dataType: 'json',
-    success: function (data) {
-      user = data;
-      getFollows(name);
-    },
-
-    error: function (xhr, status, error) {
-      if (xhr.status == 401) {
-        window.location.href = loginURL;
-      } else {
-        alert('error get user info');
-        console.log(error);
-        console.log(status);
-        console.log(xhr);
-      }
-    },
-  });
-}
 
 /**
  * searchUser - search for a username or email in users JSON
@@ -957,63 +1019,6 @@ function getAllUsers(){
 }
 
 /**
- * getFollows - get JSON of who the user is following
- * renders profileTemplate
- * calls getTimelineUser
- * @param  {String} name username
- */
-function getFollows(name) {
-  $.ajax({
-    type: 'GET',
-    url: '/follow?user=' + name,
-    dataType: 'json',
-    success: function (data) {
-      user['follows'] = data.follows;
-      user['followSize'] = data.follows.length;
-      if(!document.body.contains(document.getElementById('profilePanel'))) $('#profileContainer').prepend(Mustache.render(document.getElementById('profileTemplate').innerHTML, user));
-      getTimelineUser(name, from, now);
-    },
-
-    error: function (xhr, status, error) {
-      if (xhr.status == 401) {
-        window.location.href = loginURL;
-      } else {
-        alert('error get user follows');
-        console.log(error);
-        console.log(status);
-        console.log(xhr);
-      }
-    },
-  });
-}
-
-/**
- * postFollow - follow the user
- *
- * @param  {String} name username
- */
-function postFollow(name) {
-  $.ajax({
-    type: 'POST',
-    url: '/follow?user=' + name,
-    success: function (data) {
-      console.log("followed" + name);
-    },
-
-    error: function (xhr, status, error) {
-      if (xhr.status == 401) {
-        window.location.href = loginURL;
-      } else {
-        alert('error post follow');
-        console.log(error);
-        console.log(status);
-        console.log(xhr);
-      }
-    },
-  });
-}
-
-/**
  * likeDislike - toggle function for html update on like & dislike
  * calls deleteLike or postLike depending on elements html class
  * @param  {HTML} e  html element
@@ -1026,4 +1031,54 @@ function likeDislike(e, id) {
   } else {
     postLike(id);
   }
+}
+
+function repost(id){
+  var space = ($( '#selectRepostSpace'+id +' option:selected' ).val() === "null") ? null : $( '#selectRepostSpace'+id +' option:selected' ).val();
+
+  dataBody = {
+    'post_id': id,
+    'text': String($('#shareText'+id).val()),
+    'space': space
+  };
+
+  dataBody = JSON.stringify(dataBody);
+  $.ajax({
+    type: 'POST',
+    url: '/repost',
+    data: dataBody,
+    success: function (data) {
+      console.log("repost" + id);
+      var msg = (space != null) ? space : "your timeline.";
+      window.createNotification({
+          theme: 'success',
+          showDuration: 5000
+      })({
+          message: 'You shared into ' + msg
+      });
+      initNewsFeed();
+    },
+
+    error: function (xhr, status, error) {
+      if (xhr.status == 401) {
+        window.location.href = loginURL;
+      } else {
+        alert('error reposting');
+        console.log(error);
+        console.log(status);
+        console.log(xhr);
+      }
+    },
+  });
+}
+
+function loadSpacesRepost(id){
+  $.each(Spaces, function(key, space){
+    for (i = 0; i < document.getElementById('selectRepostSpace'+id).length; ++i){
+    if (document.getElementById('selectRepostSpace'+id).options[i].value == space.name){
+      return;
+        }
+    }
+    $('#selectRepostSpace'+id).append(Mustache.render(document.getElementById('spaceTemplateSelect').innerHTML, space));
+  });
 }

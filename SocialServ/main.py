@@ -12,6 +12,7 @@ import dateutil.parser
 import SOCIALSERV_CONSTANTS
 import re
 import shutil
+import util
 from bson.objectid import ObjectId
 from datetime import datetime, timedelta
 from pymongo import MongoClient
@@ -79,6 +80,9 @@ class BaseHandler(tornado.web.RequestHandler):
         for post in query_result:
             # post creation date
             post['creation_date'] = post['creation_date'].isoformat()
+            if('originalCreationDate' in post):
+                post['originalCreationDate'] = post['originalCreationDate'].isoformat()
+
             if 'comments' in post:
                 # creation date of each comment
                 for i in range(len(post['comments'])):
@@ -156,7 +160,6 @@ class PostHandler(BaseHandler):
             text = self.get_body_argument("text")  # http_body['text']
             tags = self.get_body_argument("tags")  # http_body['tags']
             space = self.get_body_argument("space", None)  # if space is set, this post belongs to a space (only visible inside)
-            print(space)
 
             # check if space exists, if not, end with 400 Bad Request
             if space is not None:
@@ -461,6 +464,90 @@ class LikePostHandler(BaseHandler):
             self.write({"status": 401,
                         "reason": "no_logged_in_user"})
 
+class RepostHandler(BaseHandler):
+    """
+    POST /repost
+        http body:
+            {
+                "post_id": "id_of_post",
+                "text": "new text for the repost",
+                "space": "the space where to post"
+            }
+
+        returns:
+            200 OK,
+            {"status": 200,
+             "success": True}
+
+            400 Bad Request
+            {"status": 400,
+             "reason": "missing_key_in_http_body"}
+
+            401 Unauthorized
+            {"status": 401,
+             "reason": "no_logged_in_user"}
+    """
+
+    def post(self):
+        if self.current_user:
+            http_body = tornado.escape.json_decode(self.request.body)
+
+            if "post_id" not in http_body:
+                self.set_status(400)
+                self.write({"status": 400,
+                            "reason": "missing_key_in_http_body"})
+                self.finish()
+                return
+
+            post_ref = ObjectId(http_body['post_id'])
+            text = http_body['text']
+
+            post = self.db.posts.find_one(
+                {"_id": post_ref}
+            )
+            profile = self.db.profiles.find_one({"user": self.current_user.username})
+            if profile:
+                if "profile_pic" in profile:
+                    post["repostAuthorProfilePic"] = profile["profile_pic"]
+            post["isRepost"] = True
+            post["repostAuthor"] = self.current_user.username
+            post["originalCreationDate"] = post['creation_date']
+            post["creation_date"] = datetime.utcnow()
+            post["repostText"] = text
+
+            space = http_body['space']
+
+            # check if space exists, if not, end with 400 Bad Request
+            if space is not None:
+                existing_spaces = []
+                for existing_space in self.db.spaces.find(projection={"name": True, "_id": False}):
+                    existing_spaces.append(existing_space["name"])
+                if space not in existing_spaces:
+                    self.set_status(400)
+                    self.write({"status": 400,
+                                "reason": "space_does_not_exist"})
+                    self.finish()
+                    return
+            post["space"] = space
+
+            del post["_id"]
+            if "likers" in post:
+                del post["likers"]
+            if "comments" in post:
+                del post["comments"]
+            if "tags" in post:
+                post["tags"] = ""
+
+            print(post)
+            self.db.posts.insert_one(post)
+
+            self.set_status(200)
+            self.write({"status": 200,
+                        "success": True})
+        else:
+            self.set_status(401)
+            self.write({"status": 401,
+                        "reason": "no_logged_in_user"})
 
 class FollowHandler(BaseHandler):
 
@@ -582,7 +669,7 @@ class TimelineHandler(BaseHandler):
     no use case in production, maybe use case for moderators?
     """
 
-    def get(self):
+    async def get(self):
         """
         GET /timeline
         query params:
@@ -592,42 +679,47 @@ class TimelineHandler(BaseHandler):
             200 OK,
             {"posts": [post1, post2,...]}
         """
+        if await util.is_admin(self.current_user.username):
+            time_from = self.get_argument("from", (datetime.utcnow() - timedelta(days=1)).isoformat())  # default value is 24h ago
+            time_to = self.get_argument("to", datetime.utcnow().isoformat())  # default value is now
 
-        time_from = self.get_argument("from", (datetime.utcnow() - timedelta(days=1)).isoformat())  # default value is 24h ago
-        time_to = self.get_argument("to", datetime.utcnow().isoformat())  # default value is now
+            # parse time strings into datetime objects (dateutil is able to guess format)
+            # however safe way is to use ISO 8601 format
+            time_from = dateutil.parser.parse(time_from)
+            time_to = dateutil.parser.parse(time_to)
 
-        # parse time strings into datetime objects (dateutil is able to guess format)
-        # however safe way is to use ISO 8601 format
-        time_from = dateutil.parser.parse(time_from)
-        time_to = dateutil.parser.parse(time_to)
+            result = self.db.posts.find(
+                            filter={"creation_date": {"$gte": time_from, "$lte": time_to}})
 
-        result = self.db.posts.find(
-                        filter={"creation_date": {"$gte": time_from, "$lte": time_to}})
+            posts = self.json_serialize_posts(result)
+            # TODO more efficient
+            for post in posts:
+                author_name = post["author"]
+                post["author"] = {}
+                post["author"]["profile_pic"] = "default_profile_pic.jpg"
+                profile = self.db.profiles.find_one({"user": author_name})
+                if profile:
+                    if "profile_pic" in profile:
+                        post["author"]["profile_pic"] = profile["profile_pic"]
+                post["author"]["username"] = author_name
+                if "comments" in post:
+                    for comment in post["comments"]:
+                        comment_author_name = comment["author"]
+                        comment["author"] = {}
+                        comment["author"]["profile_pic"] = "default_profile_pic.jpg"
+                        comment_author_profile = self.db.profiles.find_one({"user": comment_author_name})
+                        if comment_author_profile:
+                            if "profile_pic" in comment_author_profile:
+                                comment["author"]["profile_pic"] = comment_author_profile["profile_pic"]
+                        comment["author"]["username"] = comment_author_name
 
-        posts = self.json_serialize_posts(result)
-        # TODO more efficient
-        for post in posts:
-            author_name = post["author"]
-            post["author"] = {}
-            post["author"]["profile_pic"] = "default_profile_pic.jpg"
-            profile = self.db.profiles.find_one({"user": author_name})
-            if profile:
-                if "profile_pic" in profile:
-                    post["author"]["profile_pic"] = profile["profile_pic"]
-            post["author"]["username"] = author_name
-            if "comments" in post:
-                for comment in post["comments"]:
-                    comment_author_name = comment["author"]
-                    comment["author"] = {}
-                    comment["author"]["profile_pic"] = "default_profile_pic.jpg"
-                    comment_author_profile = self.db.profiles.find_one({"user": comment_author_name})
-                    if comment_author_profile:
-                        if "profile_pic" in comment_author_profile:
-                            comment["author"]["profile_pic"] = comment_author_profile["profile_pic"]
-                    comment["author"]["username"] = comment_author_name
+            self.set_status(200)
+            self.write({"posts": posts})
 
-        self.set_status(200)
-        self.write({"posts": posts})
+        else:
+            self.set_status(401)
+            self.write({"status": 401,
+                        "reason": "not_admin"})
 
 
 class SpaceTimelineHandler(BaseHandler):
@@ -696,6 +788,7 @@ class SpaceTimelineHandler(BaseHandler):
                                 comment["author"]["username"] = comment_author_name
 
                     self.set_status(200)
+                    print(posts)
                     self.write({"posts": posts})
 
                 else:
@@ -1334,6 +1427,21 @@ class TaskHandler(BaseHandler):
                         "reason": "no_logged_in_user"})
 
 
+class PermissionHandler(BaseHandler):
+
+    async def get(self):
+        if self.current_user:
+            role = await util.request_role(self.current_user.username)
+            self.set_status(200)
+            self.write({"status": 200,
+                        "role": role})
+
+        else:
+            self.set_status(401)
+            self.write({"status": 401,
+                        "reason": "no_logged_in_user"})
+
+
 def inherit_platform_port(port):  # invoked by platform
     SOCIALSERV_CONSTANTS.PLATFORM_PORT = port
 
@@ -1358,6 +1466,7 @@ def make_app(called_by_platform):
             (r"/posts", PostHandler),
             (r"/comment", CommentHandler),
             (r"/like", LikePostHandler),
+            (r"/repost", RepostHandler),
             (r"/follow", FollowHandler),
             (r"/updates", NewPostsSinceTimestampHandler),
             (r"/spaceadministration/([a-zA-Z\-0-9\.:,_]+)", SpaceHandler),
@@ -1369,6 +1478,7 @@ def make_app(called_by_platform):
             (r"/profileinformation", ProfileInformationHandler),
             (r"/users/([a-zA-Z\-0-9\.:,_]+)", UserHandler),
             (r"/tasks", TaskHandler),
+            (r"/permissions", PermissionHandler),
             (r"/css/(.*)", tornado.web.StaticFileHandler, {"path": "./modules/SocialServ/css/"}),
             (r"/html/(.*)", tornado.web.StaticFileHandler, {"path": "./modules/SocialServ/html/"}),
             (r"/javascripts/(.*)", tornado.web.StaticFileHandler, {"path": "./modules/SocialServ/javascripts/"}),
@@ -1383,6 +1493,7 @@ def make_app(called_by_platform):
             (r"/posts", PostHandler),
             (r"/comment", CommentHandler),
             (r"/like", LikePostHandler),
+            (r"/repost", RepostHandler),
             (r"/follow", FollowHandler),
             (r"/updates", NewPostsSinceTimestampHandler),
             (r"/spaceadministration/([a-zA-Z\-0-9\.:,_]+)", SpaceHandler),
@@ -1394,6 +1505,7 @@ def make_app(called_by_platform):
             (r"/profileinformation", ProfileInformationHandler),
             (r"/users/([a-zA-Z\-0-9\.:,_]+)", UserHandler),
             (r"/tasks", TaskHandler),
+            (r"/permissions", PermissionHandler),
             (r"/css/(.*)", tornado.web.StaticFileHandler, {"path": "./css/"}),
             (r"/html/(.*)", tornado.web.StaticFileHandler, {"path": "./html/"}),
             (r"/javascripts/(.*)", tornado.web.StaticFileHandler, {"path": "./javascripts/"}),

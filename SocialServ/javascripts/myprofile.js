@@ -1,5 +1,6 @@
 $(document).ready(function () {
-
+  document.title = currentUser.username + ' - Social Network';
+  updateProfileContainer();
 });
 
 /**
@@ -10,10 +11,26 @@ $body.delegate('#settingsTab a', 'click', function () {
   });
 
 $body.delegate('#photoFile', 'change', function () {
-  var fileInput = document.getElementById('photoFile');
-  var name = fileInput.files[0].name;
+  var photoFile = document.getElementById('photoFile');
+  var name = photoFile.files[0].name;
   $('#photoLabel').html(name);
 });
+
+function updateProfileContainer(){
+  currentUser['followSize'] = currentUser['follows'].length;
+  currentUser['spaceSize'] = currentUser['spaces'].length;
+  currentUser["profile_pic_URL"] = baseUrl + '/uploads/' + currentUser["profile"]["profile_pic"];
+  if(currentUser.hasOwnProperty('projects')) currentUser['projectSize'] = currentUser['projects'].length;
+
+  if(!document.body.contains(document.getElementById('profilePanel'))){
+    $('#profileContainer').prepend(Mustache.render(document.getElementById('profileTemplate').innerHTML, currentUser));
+  } else {
+    var template = document.getElementById('profileTemplate').innerHTML;
+    Mustache.parse(template);
+    var render = Mustache.to_html(template, currentUser);
+    $("#profileContainer").empty().html(render);
+  }
+}
 
 /**
  * saveProfileInformation
@@ -22,8 +39,11 @@ $body.delegate('#photoFile', 'change', function () {
 function saveProfileInformation() {
   var bio = String($('#bio').val());
   var institution = $('#institutionInput').val();
-  var fileInput = document.getElementById('photoFile');
-  var photo = (isImage(fileInput.files[0].name)) ? fileInput.files[0] : null;
+  var photoFile = document.getElementById('photoFile');
+  var photo = null;
+  if(photoFile.files.length > 0){
+    photo = (isImage(photoFile.files[0].name)) ? photoFile.files[0] : null;
+  }
   postProfileInformation(photo, bio, institution, null);
 }
 
@@ -63,10 +83,8 @@ function postProfileInformation(photo, bio, institution, projects) {
       $("#saveAlert").html('Successfully updated!');
       $("#saveAlert").addClass("alert alert-success");
       $('#settingsModal').modal('toggle');
-
-      setTimeout(function () {
-        getCurrentUserInfo();
-      }, 1000);
+      getCurrentUserInfo();
+      updateProfileContainer();
 
     },
 
